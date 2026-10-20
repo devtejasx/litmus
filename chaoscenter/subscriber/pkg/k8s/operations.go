@@ -299,6 +299,23 @@ func addCustomLabels(obj *unstructured.Unstructured, customLabels map[string]str
 	obj.SetLabels(newLabels)
 }
 
+// pinToInfraNamespace moves an Argo object into the infrastructure namespace and
+// reports whether it did. The infrastructure's workflow controller and its
+// argo-chaos service account live there, so a Workflow or CronWorkflow whose
+// manifest names another namespace (or none) is forbidden by a namespace-scoped
+// infrastructure and is never picked up by a cluster-scoped one.
+func pinToInfraNamespace(obj *unstructured.Unstructured) bool {
+	if InfraNamespace == "" || obj.GroupVersionKind().Group != "argoproj.io" {
+		return false
+	}
+	switch obj.GetKind() {
+	case "Workflow", "CronWorkflow":
+		obj.SetNamespace(InfraNamespace)
+		return true
+	}
+	return false
+}
+
 // AgentOperations This function handles agent operations
 func (k8s *k8sSubscriber) AgentOperations(infraAction pkgTypes.Action) (*unstructured.Unstructured, error) {
 	// Converting JSON to YAML and store it in yamlStr variable
@@ -327,6 +344,11 @@ func (k8s *k8sSubscriber) AgentOperations(infraAction pkgTypes.Action) (*unstruc
 		addCustomLabels(obj, map[string]string{"updated_by": base64.RawURLEncoding.EncodeToString([]byte(infraAction.Username))})
 	}
 
+	namespace := infraAction.Namespace
+	if pinToInfraNamespace(obj) {
+		namespace = InfraNamespace
+	}
+
 	// Find GVR
 	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
@@ -335,7 +357,7 @@ func (k8s *k8sSubscriber) AgentOperations(infraAction pkgTypes.Action) (*unstruc
 	// Obtain REST interface for the GVR
 	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 		// namespaced resources should specify the namespace
-		dr = dynamicClient.Resource(mapping.Resource).Namespace(infraAction.Namespace)
+		dr = dynamicClient.Resource(mapping.Resource).Namespace(namespace)
 	} else {
 		// for agent-wide resources
 		dr = dynamicClient.Resource(mapping.Resource)

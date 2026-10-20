@@ -317,3 +317,48 @@ func TestAllDeploymentsHealthy(t *testing.T) {
 		})
 	}
 }
+
+func TestPinToInfraNamespace(t *testing.T) {
+	previous := InfraNamespace
+	InfraNamespace = "litmus-test"
+	defer func() { InfraNamespace = previous }()
+
+	tests := []struct {
+		apiVersion, kind, namespace string
+		pinned                      bool
+		wantNamespace               string
+	}{
+		{"argoproj.io/v1alpha1", "Workflow", "litmus", true, "litmus-test"},
+		{"argoproj.io/v1alpha1", "CronWorkflow", "", true, "litmus-test"},
+		{"litmuschaos.io/v1alpha1", "ChaosEngine", "app", false, "app"},
+		{"v1", "ConfigMap", "litmus", false, "litmus"},
+	}
+	for _, tt := range tests {
+		obj := &unstructured.Unstructured{}
+		obj.SetAPIVersion(tt.apiVersion)
+		obj.SetKind(tt.kind)
+		obj.SetNamespace(tt.namespace)
+
+		if got := pinToInfraNamespace(obj); got != tt.pinned {
+			t.Errorf("%s: pinToInfraNamespace() = %v, want %v", tt.kind, got, tt.pinned)
+		}
+		if got := obj.GetNamespace(); got != tt.wantNamespace {
+			t.Errorf("%s: namespace = %q, want %q", tt.kind, got, tt.wantNamespace)
+		}
+	}
+}
+
+func TestPinToInfraNamespace_unsetInfraNamespace(t *testing.T) {
+	previous := InfraNamespace
+	InfraNamespace = ""
+	defer func() { InfraNamespace = previous }()
+
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion("argoproj.io/v1alpha1")
+	obj.SetKind("Workflow")
+	obj.SetNamespace("litmus")
+
+	if pinToInfraNamespace(obj) || obj.GetNamespace() != "litmus" {
+		t.Errorf("an unset INFRA_NAMESPACE must leave the manifest namespace, got %q", obj.GetNamespace())
+	}
+}

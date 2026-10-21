@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/gorilla/websocket"
 
@@ -137,7 +138,7 @@ func init() {
 
 func main() {
 	stopCh := make(chan struct{})
-	sigCh := make(chan os.Signal)
+	sigCh := make(chan os.Signal, 1)
 	stream := make(chan types.WorkflowEvent, 10)
 
 	subscriberGraphql := graphql.NewSubscriberGql()
@@ -158,7 +159,7 @@ func main() {
 	// listen for agent actions
 	go subscriberRequests.AgentConnect(infraData)
 
-	signal.Notify(sigCh, os.Kill, os.Interrupt)
+	signal.Notify(sigCh, syscall.SIGTERM, os.Interrupt)
 	<-sigCh
 	close(stopCh)
 	close(stream)

@@ -163,6 +163,11 @@ func OAuthCallback(userService services.ApplicationService) gin.HandlerFunc {
 
 		var defaultProject string
 		ownerProjects, err := userService.GetOwnerProjectIDs(c, signedInUser.ID)
+		if err != nil {
+			log.Error(err)
+			c.JSON(utils.ErrorStatusCodes[utils.ErrServerError], presenter.CreateErrorResponse(utils.ErrServerError))
+			return
+		}
 
 		if len(ownerProjects) > 0 {
 			defaultProject = ownerProjects[0].ID

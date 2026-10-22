@@ -854,3 +854,29 @@ func TestDeleteApiToken(t *testing.T) {
 	// then
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+func TestLoginUserOwnerProjectsLookupFails(t *testing.T) {
+	service := new(mocks.MockedApplicationService)
+	userFromDB := &entities.User{
+		ID:       "testUserID",
+		Username: "testUser",
+		Password: "hashedPassword",
+	}
+	service.On("GetConfig", "salt").Return(&authConfig.AuthConfig{}, nil)
+	service.On("FindUserByUsername", "testUser").Return(userFromDB, nil)
+	service.On("CheckPasswordHash", "hashedPassword", "testPassword").Return(nil)
+	service.On("UpdateUserByQuery", mock.Anything, mock.Anything).Return(nil)
+	service.On("GetSignedJWT", userFromDB, mock.Anything).Return("someJWTToken", nil)
+	service.On("GetOwnerProjectIDs", mock.Anything, "testUserID").Return([]*entities.Project{}, errors.New("db unavailable"))
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	body, _ := json.Marshal(entities.User{Username: "testUser", Password: "testPassword"})
+	c.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	rest.LoginUser(service)(c)
+
+	assert.Equal(t, utils.ErrorStatusCodes[utils.ErrServerError], w.Code)
+	service.AssertNotCalled(t, "CreateProject", mock.Anything)
+}

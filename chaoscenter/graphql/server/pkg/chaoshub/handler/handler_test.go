@@ -85,6 +85,29 @@ func TestReadExperimentFile(t *testing.T) {
 	}
 }
 
+// TestReadExperimentFileCamelCaseFields checks that camelCase chart keys are read
+func TestReadExperimentFileCamelCaseFields(t *testing.T) {
+	path := t.TempDir() + "/generic.chartserviceversion.yaml"
+	chart := `spec:
+  displayName: Generic
+  plan: [one]
+  faults:
+    - name: pod-delete
+      displayName: Pod Delete
+      plan: [two]
+`
+	assert.NoError(t, os.WriteFile(path, []byte(chart), 0o600))
+
+	experiment, err := handler.ReadExperimentFile(path)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "Generic", experiment.Spec.DisplayName)
+	assert.Equal(t, []string{"one"}, experiment.Spec.Plan)
+	assert.Len(t, experiment.Spec.Faults, 1)
+	assert.Equal(t, "Pod Delete", experiment.Spec.Faults[0].DisplayName)
+	assert.Equal(t, []string{"two"}, experiment.Spec.Faults[0].Plan)
+}
+
 // TestReadExperimentYAMLFile is used to test the ReadExperimentYAMLFile function
 func TestReadExperimentYAMLFile(t *testing.T) {
 	// given
